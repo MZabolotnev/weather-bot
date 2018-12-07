@@ -23,7 +23,7 @@ const GeoOptions = {
     formatter: null
 };
 
-var geocoder = NodeGeocoder(GeoOptions);
+const geocoder = NodeGeocoder(GeoOptions);
 
 module.exports = (ctx) => {
     const userId = ctx.message.from.id.toString();
@@ -58,11 +58,8 @@ module.exports = (ctx) => {
 
 function checkLocation(params) {
     return new Promise((resolve, reject) => {
-        console.log(params);
         if (params.address.stringValue){
             geocoder.geocode(params.address.stringValue, function(err, res) {
-                console.log('geocode',res);
-                console.log('geocodeERRR',err);
                 resolve({
                     latitude: res[0].latitude,
                     longitude: res[0].longitude
@@ -83,9 +80,13 @@ function weatherQueryParser(ctx, data) {
                 latitude: res.latitude,
                 longitude: res.longitude,
                 time: helper.timeParse(params),
-                language: 'en'
+                language: 'en',
+                exclude: ['hourly', 'daily'],
+                units: 'ca'
             }).get().then(weather => {
                 console.log(weather);
+                sendMessage.sendWeather(ctx, weather);
+                sendMessage.userTemplate(ctx, 'Do something else for you?');
             });
 
         } else {

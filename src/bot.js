@@ -3,6 +3,7 @@ const Telegraf = require('telegraf');
 const session = require('telegraf/session');
 const sendMessage = require('./send-message');
 const getWeather = require('./weather-service');
+const helper = require('./helper');
 
 const bot = new Telegraf(process.env.TELEGRAM_TOKEN);
 const admins = process.env.ADMIN_ID.split(',');
@@ -14,23 +15,7 @@ module.exports.start = () => {
 module.exports.instance = bot;
 
 bot.use(session());
-bot.start((ctx) => {
-    if (admins.includes(ctx.from.id.toString())) {
-        ctx.session.id = ctx.from.id.toString();
-        ctx.session.role = 'admin';
-        ctx.session.free = true;
-        ctx.session.interlocutor = {};
-        onlineAdmins.push(ctx.session);
-        ctx.reply('Welcome, admin!');
-    } else {
-        ctx.session.id = ctx.from.id.toString();
-        ctx.session.role = 'user';
-        ctx.session.free = true;
-        ctx.session.interlocutor = {};
-        sendMessage.userTemplate(ctx, 'Hi, what can I do for you?');
-    }
-});
-
+bot.start((ctx) => roleDistribution(ctx));
 bot.on('text', (ctx) => input(ctx));
 
 
@@ -46,28 +31,39 @@ bot.action('addAgent', (ctx) => {
             sendMessage.text(admin.id, `Connected user ${ctx.from.username}. He is the sender of the following messages:`,
                 );
             sendMessage.userTemplate(ctx, 'Agent is connected, write him something:');
+        } else {
+            sendMessage.userTemplate(ctx, 'Sorry, there are no free agents online now :(');
         }
+    } else {
+        sendMessage.userTemplate(ctx, 'Sorry, there are no free agents online now :(');
     }
 });
 
-bot.action(['minutely','hourly','daily'], (ctx) => {
-    sendMessage.getLocation(ctx).then(() => {
-        // console.log('ctx data', ctx.callbackQuery.data);
-        ctx.session.choice = ctx.callbackQuery.data;
-        bot.on('location', (res) => {
-            // console.log('choice', res.session.choice);
-            getWeather(
-                res.update.message.location.latitude,
-                res.update.message.location.longitude,
-                res.session.choice
-            ).get().then(data => {
-                sendMessage.sendWeather(ctx, data,  ctx.session.choice).then(() => {
-                    sendMessage.userTemplate(ctx, "What else can I do for you?");
-                })
-            });
-        });
-    })
+bot.on('location', (ctx) => {
+    // sendMessage.removeKeyboard(ctx);
+    let time ;
+    if(ctx.session.params) {
+        time = helper.timeParse(ctx.session.params);
+    } else {
+        time = new Date().toString();
+        console.log(time);
+    }
+    getWeather({
+        latitude: ctx.update.message.location.latitude,
+        longitude: ctx.update.message.location.longitude,
+        time: time,
+        language: 'en',
+        exclude: ['hourly', 'daily'],
+        units: 'ca'
+    }).get().then(weather => {
+        sendMessage.sendWeather(ctx, weather);
+        sendMessage.userTemplate(ctx, 'Do something else for you?');
+        ctx.session.params = undefined;
+    });
+});
 
+bot.action('now', (ctx) => {
+    sendMessage.getLocation(ctx);
 });
 
 bot.action('stop', (ctx) => {
@@ -82,6 +78,8 @@ bot.action('stop', (ctx) => {
 
 function input(ctx) {
     console.log(ctx.message.text);
+
+
     if (ctx.session.role === 'user') {
       if  (ctx.session.free) {
           processMessage(ctx);
@@ -95,6 +93,8 @@ function input(ctx) {
             sendMessage.transfer(ctx);
 
         }
+    } else {
+        roleDistribution(ctx);
     }
 }
 
@@ -102,4 +102,21 @@ function getFreeAdmins(admins) {
     return admins.filter(el => {
         if (el.free) return el;
     })
+}
+
+function roleDistribution (ctx) {
+    if (admins.includes(ctx.from.id.toString())) {
+        ctx.session.id = ctx.from.id.toString();
+        ctx.session.role = 'admin';
+        ctx.session.free = true;
+        ctx.session.interlocutor = {};
+        onlineAdmins.push(ctx.session);
+        ctx.reply('Welcome, admin!');
+    } else {
+        ctx.session.id = ctx.from.id.toString();
+        ctx.session.role = 'user';
+        ctx.session.free = true;
+        ctx.session.interlocutor = {};
+        sendMessage.userTemplate(ctx, 'Hi, what can I do for you?');
+    }
 }

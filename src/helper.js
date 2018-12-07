@@ -9,6 +9,10 @@ module.exports.timeParse = (params) => {
             return params.date_time.structValue.fields.startDateTime.stringValue;
         }
     } else {
-        return new Date.toString();
+        return new Date().toString();
     }
 };
+
+// module.exports = () => {
+//    
+// };
