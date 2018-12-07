@@ -23,6 +23,7 @@
     "dark-sky": "^1.1.4",
     "dialogflow": "^0.7.0",
     "dotenv": "^6.1.0",
+    "node-geocoder": "^3.22.0",
     "telegraf": "^3.25.0"
   }
 }

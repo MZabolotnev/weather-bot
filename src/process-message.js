@@ -2,8 +2,8 @@ const dialogFlow = require('dialogflow');
 const projectId = process.env.PROJECT_ID;
 const LANGUAGE_CODE = 'en-US';
 const sendMessage = require('./send-message');
-
-const Telegraf = require('telegraf');
+const getWeather = require('./weather-service');
+const helper = require('./helper');
 
 const config = {
     credentials: {
@@ -13,6 +13,17 @@ const config = {
 };
 
 const sessionClient = new dialogFlow.SessionsClient(config);
+
+const NodeGeocoder = require('node-geocoder');
+
+const GeoOptions = {
+    provider: 'opencage',
+    httpAdapter: 'https',
+    apiKey: process.env.GEOCODE_API_KEY,
+    formatter: null
+};
+
+var geocoder = NodeGeocoder(GeoOptions);
 
 module.exports = (ctx) => {
     const userId = ctx.message.from.id.toString();
@@ -32,9 +43,57 @@ module.exports = (ctx) => {
         .detectIntent(request)
         .then((responses) => {
             const result = responses[0].queryResult;
-            sendMessage.userTemplate(ctx, result.fulfillmentText);
+            if (result.action === 'weather') {
+                weatherQueryParser(ctx, result);
+            } else {
+                sendMessage.userTemplate(ctx, result.fulfillmentText);
+            }
         })
         .catch((err) => {
             console.error('ERROR:', err);
         });
 };
+
+
+
+function checkLocation(params) {
+    return new Promise((resolve, reject) => {
+        console.log(params);
+        if (params.address.stringValue){
+            geocoder.geocode(params.address.stringValue, function(err, res) {
+                console.log('geocode',res);
+                console.log('geocodeERRR',err);
+                resolve({
+                    latitude: res[0].latitude,
+                    longitude: res[0].longitude
+                })
+            });
+        } else {
+            resolve(undefined);
+        }
+    });
+}
+
+function weatherQueryParser(ctx, data) {
+    const params = data.parameters.fields;
+
+    checkLocation(params).then(res => {
+        if (res) {
+            getWeather({
+                latitude: res.latitude,
+                longitude: res.longitude,
+                time: helper.timeParse(params),
+                language: 'en'
+            }).get().then(weather => {
+                console.log(weather);
+            });
+
+        } else {
+            ctx.session.params = params;
+            sendMessage.getLocation(ctx);
+        }
+
+    });
+
+
+}

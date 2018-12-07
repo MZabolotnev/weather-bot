@@ -1,6 +1,7 @@
 const bot = require('./bot');
 const Markup = require('telegraf/markup');
 
+
 const weatherButtons = [
     [Markup.callbackButton('Weather right now', 'minutely')],
     [Markup.callbackButton('Next 48 hours weather', 'hourly')],
