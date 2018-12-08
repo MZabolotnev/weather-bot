@@ -1,7 +1,9 @@
 const dialogFlow = require('dialogflow');
+
 const projectId = process.env.PROJECT_ID;
 const LANGUAGE_CODE = 'en-US';
 const helper = require('./helper');
+
 const config = {
     credentials: {
         private_key: process.env.DIALOGFLOW_PRIVATE_KEY,
@@ -27,7 +29,7 @@ module.exports = (ctx) => {
 
     sessionClient
         .detectIntent(request)
-        .then((responses) => helper.processIntentHandler(ctx, responses))
+        .then(responses => helper.processIntentHandler(ctx, responses))
         .catch((err) => {
             console.error('ERROR:', err);
         });

@@ -1,9 +1,10 @@
+const NodeGeocoder = require('node-geocoder');
+const Markup = require('telegraf/markup');
 const processMessage = require('./process-message');
 const sendMessage = require('./send-message');
 const getWeather = require('./weather-service');
-const NodeGeocoder = require('node-geocoder');
 const bot = require('../app');
-const Markup = require('telegraf/markup');
+
 const admins = process.env.ADMIN_ID.split(',');
 const onlineAdmins = [];
 
@@ -11,16 +12,32 @@ const GeoOptions = {
     provider: 'opencage',
     httpAdapter: 'https',
     apiKey: process.env.GEOCODE_API_KEY,
-    formatter: null
+    formatter: null,
 };
 const geocoder = NodeGeocoder(GeoOptions);
 const weatherButtons = [[Markup.callbackButton('Weather right now', 'now')]];
 
-function getFreeAdmins(admins) {
-    console.log(admins);
-    return admins.filter(el => {
-        if (el.free) return el;
-    })
+function getFreeAdmins(arr) {
+    return arr.filter((el) => {
+        if (el.free) {
+            return el;
+        }
+        return undefined;
+    });
+}
+
+function timeParse(params) {
+    console.log(params);
+    if (params.date_time.stringValue) {
+        return params.date_time.stringValue;
+    }
+    if (params.date_time.structValue) {
+        if (params.date_time.structValue.fields.startDate) {
+            return params.date_time.structValue.fields.startDate.stringValue;
+        }
+        return params.date_time.structValue.fields.startDateTime.stringValue;
+    }
+    return new Date().toString();
 }
 
 function userContextTemplate(ctx) {
@@ -28,15 +45,55 @@ function userContextTemplate(ctx) {
 He is the sender of the following messages.
 Context of the last 10 queries:
 `;
-    if(ctx.session.context.length > 0) {
+    if (ctx.session.context.length > 0) {
         ctx.session.context.forEach((el) => {
             template += `💬 ${el}\n`;
         });
     } else {
-        template += 'No context.'
+        template += 'No context.';
     }
 
     return template;
+}
+
+function checkLocation(params) {
+    return new Promise((resolve) => {
+        if (params.address.stringValue) {
+            geocoder.geocode(params.address.stringValue, (err, res) => {
+                resolve({
+                    latitude: res[0].latitude,
+                    longitude: res[0].longitude,
+                });
+            });
+        } else {
+            resolve(undefined);
+        }
+    });
+}
+
+function processWeatherQueryParser(ctx, data) {
+    const params = data.parameters.fields;
+    checkLocation(params).then((res) => {
+        if (res) {
+            getWeather({
+                latitude: res.latitude,
+                longitude: res.longitude,
+                time: timeParse(params),
+                language: 'en',
+                exclude: ['hourly', 'daily'],
+                units: 'ca',
+            })
+                .get()
+                .then((weather) => {
+                    console.log(weather);
+                    sendMessage.sendWeather(ctx, weather);
+                    sendMessage.userTemplate(ctx, 'Do something else for you?');
+                });
+        } else {
+            ctx.session.params = params;
+            sendMessage.getLocation(ctx);
+        }
+    });
 }
 
 function roleDistribution(ctx) {
@@ -55,36 +112,6 @@ function roleDistribution(ctx) {
     }
 }
 
-function checkLocation(params) {
-    return new Promise((resolve) => {
-        if (params.address.stringValue){
-            geocoder.geocode(params.address.stringValue, function(err, res) {
-                resolve({
-                    latitude: res[0].latitude,
-                    longitude: res[0].longitude
-                })
-            });
-        } else {
-            resolve(undefined);
-        }
-    });
-}
-
-function timeParse(params) {
-    console.log(params);
-    if (params.date_time.stringValue) {
-        return params.date_time.stringValue;
-    } else if (params.date_time.structValue) {
-        if (params.date_time.structValue.fields.startDate) {
-            return params.date_time.structValue.fields.startDate.stringValue;
-        } else {
-            return params.date_time.structValue.fields.startDateTime.stringValue;
-        }
-    } else {
-        return new Date().toString();
-    }
-}
-
 module.exports.timeParse = timeParse;
 
 module.exports.botStart = (ctx) => {
@@ -100,24 +127,29 @@ module.exports.botAddAgent = (ctx) => {
     if (onlineAdmins.length > 0) {
         const freeAdmins = getFreeAdmins(onlineAdmins);
         const admin = freeAdmins[0];
-        console.log(admin);
-        if(admin) {
+        if (admin) {
             ctx.session.free = false;
             ctx.session.interlocutor = admin;
             admin.free = false;
             admin.interlocutor = ctx.session;
             sendMessage.text(admin.id, userContextTemplate(ctx));
         } else {
-            sendMessage.userTemplate(ctx, 'Sorry, there are no free agents online now :(');
+            sendMessage.userTemplate(
+                ctx,
+                'Sorry, there are no free agents online now :(',
+            );
         }
     } else {
-        sendMessage.userTemplate(ctx, 'Sorry, there are no free agents online now :(');
+        sendMessage.userTemplate(
+            ctx,
+            'Sorry, there are no free agents online now :(',
+        );
     }
 };
 
 module.exports.botLocation = (ctx) => {
-    let time ;
-    if(ctx.session.params) {
+    let time;
+    if (ctx.session.params) {
         time = timeParse(ctx.session.params);
     } else {
         time = new Date().toString();
@@ -125,20 +157,25 @@ module.exports.botLocation = (ctx) => {
     getWeather({
         latitude: ctx.update.message.location.latitude,
         longitude: ctx.update.message.location.longitude,
-        time: time,
+        time,
         language: 'en',
         exclude: ['hourly', 'daily'],
-        units: 'ca'
-    }).get().then(weather => {
-        sendMessage.sendWeather(ctx, weather);
-        sendMessage.userTemplate(ctx, 'Do something else for you?');
-        ctx.session.params = undefined;
-    });
+        units: 'ca',
+    })
+        .get()
+        .then((weather) => {
+            sendMessage.sendWeather(ctx, weather);
+            sendMessage.userTemplate(ctx, 'Do something else for you?');
+            ctx.session.params = undefined;
+        });
 };
 
 module.exports.stopConversation = (ctx) => {
-    sendMessage.text(ctx.from.id.toString(), `Connection close`);
-    sendMessage.text(ctx.session.interlocutor.id.toString(), `Connection close`);
+    sendMessage.text(ctx.from.id.toString(), 'Connection close');
+    sendMessage.text(
+        ctx.session.interlocutor.id.toString(),
+        'Connection close',
+    );
     ctx.session.interlocutor.free = true;
     ctx.session.interlocutor.interlocutor = {};
     ctx.session.free = true;
@@ -147,56 +184,38 @@ module.exports.stopConversation = (ctx) => {
 
 module.exports.botTextInput = (ctx) => {
     if (ctx.session.role === 'user') {
-        if  (ctx.session.free) {
+        if (ctx.session.free) {
             processMessage(ctx);
         } else {
             sendMessage.transfer(ctx);
         }
     } else if (ctx.session.role === 'admin') {
         if (ctx.session.free) {
-            sendMessage.text(ctx.from.id.toString(), 'Please wait for the user to connect.');
+            sendMessage.text(
+                ctx.from.id.toString(),
+                'Please wait for the user to connect.',
+            );
         } else {
             sendMessage.transfer(ctx);
-
         }
     } else {
         roleDistribution(ctx);
         if (ctx.session.role === 'user') {
             processMessage(ctx);
         } else if (ctx.session.role === 'admin') {
-            sendMessage.text(ctx.from.id.toString(), 'Please wait for the user to connect.');
+            sendMessage.text(
+                ctx.from.id.toString(),
+                'Please wait for the user to connect.',
+            );
         }
     }
 };
 
-module.exports.processWeatherQueryParser = (ctx, data) => {
-    const params = data.parameters.fields;
-    checkLocation(params).then(res => {
-        if (res) {
-            getWeather({
-                latitude: res.latitude,
-                longitude: res.longitude,
-                time: timeParse(params),
-                language: 'en',
-                exclude: ['hourly', 'daily'],
-                units: 'ca'
-            }).get().then(weather => {
-                console.log(weather);
-                sendMessage.sendWeather(ctx, weather);
-                sendMessage.userTemplate(ctx, 'Do something else for you?');
-            });
-
-        } else {
-            ctx.session.params = params;
-            sendMessage.getLocation(ctx);
-        }
-
-    });
-};
+module.exports.processWeatherQueryParser = processWeatherQueryParser;
 
 module.exports.sendUserTemplate = (ctx, text) => {
     const keyboard = [...weatherButtons];
-    if(ctx.session.role === 'user' && ctx.session.free) {
+    if (ctx.session.role === 'user' && ctx.session.free) {
         keyboard.push([Markup.callbackButton('Switch to agent', 'addAgent')]);
     } else if (ctx.session.role === 'user' && !ctx.session.free) {
         keyboard.push([Markup.callbackButton('Stop conversation', 'delAgent')]);
@@ -211,34 +230,31 @@ module.exports.sendTransfer = (ctx) => {
     return bot.instance.telegram.sendMessage(
         ctx.session.interlocutor.id.toString(),
         ctx.message.text,
-        Markup.inlineKeyboard(keyboard).extra()
+        Markup.inlineKeyboard(keyboard).extra(),
     );
 };
 
-module.exports.sendText = (id, text) => {
-    return bot.instance.telegram.sendMessage(id, text)
-};
+module.exports.sendText = (id, text) => bot.instance.telegram.sendMessage(id, text);
 
 module.exports.sendGetLocation = (ctx) => {
-    let keyboard = Markup
-        .keyboard([Markup.locationRequestButton('Send location')])
+    const keyboard = Markup.keyboard([
+        Markup.locationRequestButton('Send location'),
+    ])
         .oneTime()
         .resize()
         .extra();
     return ctx.reply('Click the button to geolocate:', keyboard);
 };
 
-module.exports.sendRemoveKeyboard = (ctx) => {
-    return bot.instance.telegram.sendMessage(ctx.from.id, 'test', {
-        reply_markup: {
-            remove_keyboard: true,
-        }
-    })
-};
+module.exports.sendRemoveKeyboard = ctx => bot.instance.telegram.sendMessage(ctx.from.id, 'test', {
+    reply_markup: {
+        remove_keyboard: true,
+    },
+});
 
 module.exports.sendWeather = (ctx, data) => {
-    let weather = data.currently;
-    let message = `<b>${weather.summary}</b>
+    const weather = data.currently;
+    const message = `<b>${weather.summary}</b>
 Temperature: <b>${weather.temperature} °C</b>
 Apparent Temperature: <b>${weather.apparentTemperature} °C</b>
 Wind Speed: <b>${weather.windSpeed} kph</b>`;
@@ -248,7 +264,7 @@ Wind Speed: <b>${weather.windSpeed} kph</b>`;
 module.exports.processIntentHandler = (ctx, responses) => {
     const result = responses[0].queryResult;
     if (result.action === 'weather') {
-        helper.processWeatherQueryParser(ctx, result);
+        processWeatherQueryParser(ctx, result);
     } else {
         sendMessage.userTemplate(ctx, result.fulfillmentText);
     }
