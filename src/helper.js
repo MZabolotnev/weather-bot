@@ -17,9 +17,42 @@ const geocoder = NodeGeocoder(GeoOptions);
 const weatherButtons = [[Markup.callbackButton('Weather right now', 'now')]];
 
 function getFreeAdmins(admins) {
+    console.log(admins);
     return admins.filter(el => {
         if (el.free) return el;
     })
+}
+
+function userContextTemplate(ctx) {
+    let template = `Connected user ${ctx.from.username}.
+He is the sender of the following messages.
+Context of the last 10 queries:
+`;
+    if(ctx.session.context.length > 0) {
+        ctx.session.context.forEach((el) => {
+            template += `💬 ${el}\n`;
+        });
+    } else {
+        template += 'No context.'
+    }
+
+    return template;
+}
+
+function roleDistribution(ctx) {
+    if (admins.includes(ctx.from.id.toString())) {
+        ctx.session.id = ctx.from.id.toString();
+        ctx.session.role = 'admin';
+        ctx.session.free = true;
+        ctx.session.interlocutor = {};
+        onlineAdmins.push(ctx.session);
+    } else {
+        ctx.session.id = ctx.from.id.toString();
+        ctx.session.role = 'user';
+        ctx.session.free = true;
+        ctx.session.interlocutor = {};
+        ctx.session.context = [];
+    }
 }
 
 function checkLocation(params) {
@@ -55,34 +88,25 @@ function timeParse(params) {
 module.exports.timeParse = timeParse;
 
 module.exports.botStart = (ctx) => {
-    if (admins.includes(ctx.from.id.toString())) {
-        ctx.session.id = ctx.from.id.toString();
-        ctx.session.role = 'admin';
-        ctx.session.free = true;
-        ctx.session.interlocutor = {};
-        onlineAdmins.push(ctx.session);
-        ctx.reply('Welcome, admin!');
-    } else {
-        ctx.session.id = ctx.from.id.toString();
-        ctx.session.role = 'user';
-        ctx.session.free = true;
-        ctx.session.interlocutor = {};
+    roleDistribution(ctx);
+    if (ctx.session.role === 'user') {
         sendMessage.userTemplate(ctx, 'Hi, what can I do for you?');
+    } else if (ctx.session.role === 'admin') {
+        ctx.reply('Welcome, admin!');
     }
 };
 
 module.exports.botAddAgent = (ctx) => {
     if (onlineAdmins.length > 0) {
         const freeAdmins = getFreeAdmins(onlineAdmins);
-        const admin = freeAdmins[Math.floor(Math.random() * (freeAdmins.length + 1))];
+        const admin = freeAdmins[0];
+        console.log(admin);
         if(admin) {
             ctx.session.free = false;
             ctx.session.interlocutor = admin;
             admin.free = false;
             admin.interlocutor = ctx.session;
-            sendMessage.text(admin.id, `Connected user ${ctx.from.username}. He is the sender of the following messages:`,
-            );
-            sendMessage.userTemplate(ctx, 'Agent is connected, write him something:');
+            sendMessage.text(admin.id, userContextTemplate(ctx));
         } else {
             sendMessage.userTemplate(ctx, 'Sorry, there are no free agents online now :(');
         }
@@ -137,6 +161,11 @@ module.exports.botTextInput = (ctx) => {
         }
     } else {
         roleDistribution(ctx);
+        if (ctx.session.role === 'user') {
+            processMessage(ctx);
+        } else if (ctx.session.role === 'admin') {
+            sendMessage.text(ctx.from.id.toString(), 'Please wait for the user to connect.');
+        }
     }
 };
 
@@ -222,5 +251,12 @@ module.exports.processIntentHandler = (ctx, responses) => {
         helper.processWeatherQueryParser(ctx, result);
     } else {
         sendMessage.userTemplate(ctx, result.fulfillmentText);
+    }
+};
+
+module.exports.processAddContext = (ctx) => {
+    ctx.session.context.push(ctx.message.text);
+    if (ctx.session.context.length > 9) {
+        ctx.session.context.shift();
     }
 };

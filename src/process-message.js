@@ -13,6 +13,7 @@ const sessionClient = new dialogFlow.SessionsClient(config);
 module.exports = (ctx) => {
     const userId = ctx.message.from.id.toString();
     const message = ctx.message.text;
+    helper.processAddContext(ctx);
     const sessionPath = sessionClient.sessionPath(projectId, userId);
     const request = {
         session: sessionPath,

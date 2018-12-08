@@ -2,7 +2,7 @@ const helper = require('./helper');
 
 module.exports.userTemplate = (ctx, text) => helper.sendUserTemplate(ctx, text);
 
-module.exports.transfer = (ctx) => helper.sendTransfer(ctx, text);
+module.exports.transfer = (ctx) => helper.sendTransfer(ctx);
 
 module.exports.text = (id, text) => helper.sendText(id, text);
 
