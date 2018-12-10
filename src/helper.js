@@ -14,7 +14,7 @@ const GeoOptions = {
     apiKey: process.env.GEOCODE_API_KEY,
     formatter: null,
 };
-const geocoder = NodeGeocoder(GeoOptions);
+const geoCoder = NodeGeocoder(GeoOptions);
 const weatherButtons = [[Markup.callbackButton('Weather right now', 'now')]];
 
 function getFreeAdmins(arr) {
@@ -27,7 +27,6 @@ function getFreeAdmins(arr) {
 }
 
 function timeParse(params) {
-    console.log(params);
     if (params.date_time.stringValue) {
         return params.date_time.stringValue;
     }
@@ -59,7 +58,7 @@ Context of the last 10 queries:
 function checkLocation(params) {
     return new Promise((resolve) => {
         if (params.address.stringValue) {
-            geocoder.geocode(params.address.stringValue, (err, res) => {
+            geoCoder.geocode(params.address.stringValue, (err, res) => {
                 resolve({
                     latitude: res[0].latitude,
                     longitude: res[0].longitude,
@@ -85,7 +84,6 @@ function processWeatherQueryParser(ctx, data) {
             })
                 .get()
                 .then((weather) => {
-                    console.log(weather);
                     sendMessage.sendWeather(ctx, weather);
                     sendMessage.userTemplate(ctx, 'Do something else for you?');
                 });

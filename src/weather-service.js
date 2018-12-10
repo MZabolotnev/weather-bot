@@ -1,5 +1,5 @@
 const DarkSky = require('dark-sky');
 
-const darksky = new DarkSky(process.env.DARK_SKY);
+const darkSky = new DarkSky(process.env.DARK_SKY);
 
-module.exports = options => darksky.options(options);
+module.exports = options => darkSky.options(options);
