@@ -131,6 +131,7 @@ module.exports.botAddAgent = (ctx) => {
             admin.free = false;
             admin.interlocutor = ctx.session;
             sendMessage.text(admin.id, userContextTemplate(ctx));
+            ctx.reply('Agent connected');
         } else {
             sendMessage.userTemplate(
                 ctx,
