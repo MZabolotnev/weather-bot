@@ -16,6 +16,6 @@
 
 2. To register an agent, enter his id in the admin id field, he also needs to send the bot command /start.
 
-3. Run "npm install".
+3. Run "npm install"
 
-4. Start the server with a command "node app".
+4. Start the server with a command "node app"
